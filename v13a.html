@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RMGS Digital Signage</title>
+  <!-- Weather Icons font — works on all browsers incl. Raspberry Pi Chromium -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.10/css/weather-icons.min.css">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #000;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      cursor: none; /* Hide cursor for kiosk */
+    }
+
+    /* ── Google Slides Embed ── */
+    #slides-frame {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+    }
+
+    /* ── Info Widget: bottom-left, sits above ticker ── */
+    #widget {
+      position: fixed;
+      bottom: 80px;
+      left: 28px;
+      z-index: 9999;
+      background: rgba(10, 10, 20, 0.96);
+      border-radius: 16px;
+      padding: 18px 24px 16px;
+      color: #fff;
+      min-width: 220px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+
+    /* Time */
+    #time {
+      font-size: 3.2em;
+      font-weight: 700;
+      letter-spacing: -1px;
+      line-height: 1;
+      /* subtle blue-white gradient on the digits */
+      background: linear-gradient(135deg, #ffffff 60%, #a8c8ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Date */
+    #date {
+      font-size: 0.88em;
+      margin-top: 5px;
+      color: rgba(255,255,255,0.70);
+      font-weight: 400;
+      letter-spacing: 0.02em;
+    }
+
+    /* Rule */
+    .rule {
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.15);
+      margin: 13px 0 11px;
+    }
+
+    /* Weather row */
+    #weather {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #weather-icon {
+      font-size: 1.6em;
+      line-height: 0;    /* collapse extra ascent space so flexbox centres the glyph itself */
+      flex-shrink: 0;
+      color: #a8c8ff;
+    }
+
+    #weather-desc {
+      font-size: 0.85em;
+      color: rgba(255,255,255,0.72);
+      flex: 1;
+    }
+
+    #weather-temp {
+      font-size: 1.25em;
+      font-weight: 600;
+      color: #a8c8ff;
+      letter-spacing: -0.5px;
+    }
+
+    /* Loading fade-in */
+    #widget {
+      opacity: 0;
+      animation: fadeIn 0.8s ease 0.5s forwards;
+    }
+
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+
+    /* ── News Ticker ── */
+    #ticker {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 64px;
+      z-index: 9998;
+      display: flex;
+      align-items: center;
+      background: rgba(10, 10, 20, 0.96);
+      overflow: hidden;
+      opacity: 0;
+      animation: fadeIn 0.8s ease 1s forwards;
+    }
+
+    #ticker-label {
+      flex-shrink: 0;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      background: #bb1919;
+      font-size: 0.9em;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: #fff;
+      text-transform: uppercase;
+      border-right: 1px solid rgba(255, 255, 255, 0.15);
+      gap: 8px;
+    }
+
+    #ticker-label span {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      background: #fff;
+      border-radius: 50%;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1;   transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.75); }
+    }
+
+    #ticker-viewport {
+      flex: 1;
+      overflow: hidden;
+      height: 100%;
+      position: relative;
+    }
+
+    #ticker-track {
+      display: inline-flex;
+      align-items: center;
+      height: 100%;
+      white-space: nowrap;
+      will-change: transform;
+      animation: ticker-scroll linear infinite;
+      animation-play-state: paused;
+    }
+
+    @keyframes ticker-scroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+
+    .ticker-item {
+      font-size: 1.1em;
+      color: rgba(255, 255, 255, 0.90);
+      padding-right: 0;
+    }
+
+    .ticker-sep {
+      color: #a8c8ff;
+      font-size: 0.8em;
+      padding: 0 24px;
+      opacity: 0.7;
+    }
+
+    /* ── Traffic Widget: bottom-right ── */
+    #traffic-widget {
+      position: fixed;
+      bottom: 80px;
+      right: 28px;
+      z-index: 9999;
+      background: rgba(10, 10, 20, 0.96);
+      border-radius: 16px;
+      padding: 14px 18px 16px;
+      color: #fff;
+      min-width: 240px;
+      max-width: 300px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      opacity: 0;
+      animation: fadeIn 0.8s ease 0.5s forwards;
+    }
+
+    #traffic-title {
+      font-size: 0.7em;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 10px;
+    }
+
+    /* Fixed-height window — taller content scrolls through it automatically */
+    #traffic-viewport {
+      height: 200px;
+      overflow: hidden;
+      position: relative;
+      mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
+    }
+
+    #traffic-list {
+      display: flex;
+      flex-direction: column;
+      will-change: transform;
+      animation: traffic-scroll linear infinite;
+      animation-play-state: paused;
+    }
+
+    @keyframes traffic-scroll {
+      from { transform: translateY(0); }
+      to   { transform: translateY(-50%); }
+    }
+
+    .traffic-clear {
+      font-size: 0.88em;
+      color: #4ade80;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+
+    .traffic-item {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 8px 0;
+    }
+
+    .traffic-item-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .traffic-road {
+      font-size: 0.92em;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .traffic-badge {
+      font-size: 0.62em;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .traffic-badge.minor    { background: rgba(245,158,11,0.2); color: #fbbf24; }
+    .traffic-badge.moderate { background: rgba(249,115,22,0.2); color: #fb923c; }
+    .traffic-badge.major    { background: rgba(239,68,68,0.2);  color: #f87171; }
+
+    .traffic-item-desc {
+      font-size: 0.77em;
+      color: rgba(255,255,255,0.5);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* "From" / "Near" / "to" labels — visually distinct so they read as
+       route descriptors, not as part of the place name itself */
+    .traffic-prefix {
+      font-weight: 500;
+      font-size: 0.78em;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: rgba(255,255,255,0.4);
+      margin-right: 4px;
+    }
+
+    /* Place names in a "From X / To Y" pairing — bold and white to match
+       across both lines, since there's no road number to act as the headline */
+    .traffic-strong {
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .traffic-rule {
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       GOOGLE SLIDES EMBED
+       Replace PRESENTATION_ID below with your actual Slides ID.
+       Find it in the URL: docs.google.com/presentation/d/XXXXXXX/edit
+       Change delayms to control seconds per slide (ms):
+         5000 = 5s  |  10000 = 10s  |  15000 = 15s  |  30000 = 30s
+  ════════════════════════════════════════════════════════════════ -->
+  <iframe
+    id="slides-frame"
+    src="https://docs.google.com/presentation/d/1vyG4eYwWcoiVyFzQNdiYqXiHUaQTJBniUhCUAtjjIAw/embed?start=true&loop=true&delayms=10000&rm=minimal"
+    allowfullscreen="true"
+    mozallowfullscreen="true"
+    webkitallowfullscreen="true">
+  </iframe>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TIME / DATE / WEATHER WIDGET
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="widget">
+    <div id="time">--:--</div>
+    <div id="date">Loading…</div>
+    <hr class="rule">
+    <div id="weather">
+      <i id="weather-icon" class="wi wi-thermometer"></i>
+      <span id="weather-desc">Loading…</span>
+      <span id="weather-temp"></span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       NEWS TICKER
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="ticker">
+    <div id="ticker-label">
+      <span></span>BBC News
+    </div>
+    <div id="ticker-viewport">
+      <div id="ticker-track">
+        <span class="ticker-item">Loading headlines…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       TRAFFIC WIDGET
+  ════════════════════════════════════════════════════════════════ -->
+  <div id="traffic-widget">
+    <div id="traffic-title">Local Traffic</div>
+    <div id="traffic-viewport">
+      <div id="traffic-list">
+        <span style="font-size:0.85em;color:rgba(255,255,255,0.35)">Loading…</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ═══════════════════════════════════════════════════════════
+       CONFIGURATION — edit these for your school
+    ════════════════════════════════════════════════════════════ */
+    const CONFIG = {
+      // School location: find your lat/lon at https://www.latlong.net/
+      latitude:  51.371906,
+      longitude:  0.594229,
+
+      // How often to refresh weather (minutes)
+      weatherRefreshMins: 10,
+
+      // How often to reload the Google Slides iframe to pick up any changes (minutes)
+      // Google's publish cache usually updates within ~5 mins, so 10 mins is a safe default
+      slidesRefreshMins: 10,
+
+      // How often to refresh BBC News headlines (minutes)
+      newsRefreshMins: 60,
+
+      // Cloudflare Worker URL that proxies TomTom traffic requests.
+      // Your TomTom key lives only on Cloudflare's server, never here.
+      // See traffic-proxy-worker.js for setup steps. Looks like:
+      // 'https://rmgs-traffic-proxy.yourname.workers.dev'
+      trafficProxyUrl: '',
+
+      // How often to refresh local traffic data (minutes)
+      trafficRefreshMins: 10,
+    };
+
+    /* ─── Time & Date ─── */
+    function tick() {
+      const now = new Date();
+      document.getElementById('time').textContent =
+        now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+      document.getElementById('date').textContent =
+        now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+    tick();
+    setInterval(tick, 1000);
+
+    /* ─── Weather (Open-Meteo — free, no API key needed) ─── */
+    // WMO weather code → Weather Icons font class + description
+    const WMO = {
+      0:  { icon: 'wi-day-sunny',          desc: 'Clear sky' },
+      1:  { icon: 'wi-day-cloudy',         desc: 'Mainly clear' },
+      2:  { icon: 'wi-cloud',              desc: 'Partly cloudy' },
+      3:  { icon: 'wi-cloudy',             desc: 'Overcast' },
+      45: { icon: 'wi-fog',                desc: 'Fog' },
+      48: { icon: 'wi-fog',                desc: 'Freezing fog' },
+      51: { icon: 'wi-sprinkle',           desc: 'Light drizzle' },
+      53: { icon: 'wi-sprinkle',           desc: 'Drizzle' },
+      55: { icon: 'wi-sprinkle',           desc: 'Heavy drizzle' },
+      56: { icon: 'wi-rain-mix',           desc: 'Freezing drizzle' },
+      57: { icon: 'wi-rain-mix',           desc: 'Heavy freezing drizzle' },
+      61: { icon: 'wi-rain',               desc: 'Light rain' },
+      63: { icon: 'wi-rain',               desc: 'Rain' },
+      65: { icon: 'wi-rain',               desc: 'Heavy rain' },
+      66: { icon: 'wi-rain-mix',           desc: 'Freezing rain' },
+      67: { icon: 'wi-rain-mix',           desc: 'Heavy freezing rain' },
+      71: { icon: 'wi-snow',               desc: 'Light snow' },
+      73: { icon: 'wi-snow',               desc: 'Snow' },
+      75: { icon: 'wi-snow',               desc: 'Heavy snow' },
+      77: { icon: 'wi-snowflake-cold',     desc: 'Snow grains' },
+      80: { icon: 'wi-showers',            desc: 'Rain showers' },
+      81: { icon: 'wi-showers',            desc: 'Rain showers' },
+      82: { icon: 'wi-showers',            desc: 'Heavy showers' },
+      85: { icon: 'wi-snow',               desc: 'Snow showers' },
+      86: { icon: 'wi-snow',               desc: 'Heavy snow showers' },
+      95: { icon: 'wi-thunderstorm',       desc: 'Thunderstorm' },
+      96: { icon: 'wi-thunderstorm',       desc: 'Thunderstorm + hail' },
+      99: { icon: 'wi-thunderstorm',       desc: 'Thunderstorm + hail' },
+    };
+
+    async function fetchWeather() {
+      try {
+        const { latitude: lat, longitude: lon } = CONFIG;
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+                    `&current=temperature_2m,weather_code&temperature_unit=celsius&timezone=auto`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('Weather fetch failed');
+        const d = await r.json();
+        const temp = Math.round(d.current.temperature_2m);
+        const info = WMO[d.current.weather_code] ?? { icon: 'wi-thermometer', desc: 'Weather' };
+        // Set the Weather Icons font class on the <i> element
+        document.getElementById('weather-icon').className = `wi ${info.icon}`;
+        document.getElementById('weather-desc').textContent = info.desc;
+        document.getElementById('weather-temp').textContent = `${temp}°C`;
+      } catch {
+        document.getElementById('weather-desc').textContent = 'Unavailable';
+      }
+    }
+
+    fetchWeather();
+    setInterval(fetchWeather, CONFIG.weatherRefreshMins * 60_000);
+
+    /* ─── Slides auto-refresh ─── */
+    // Reloads only the iframe (not the whole page) so the clock and weather
+    // stay up continuously. Picks up any changes made in Google Slides.
+    setInterval(() => {
+      const frame = document.getElementById('slides-frame');
+      frame.src = frame.src; // triggers a fresh fetch from Google
+    }, CONFIG.slidesRefreshMins * 60_000);
+
+    /* ─── BBC News Ticker ─── */
+    // BBC RSS is fetched via a CORS proxy (api.allorigins.win) because browsers
+    // block direct cross-origin RSS requests.
+    // On failure the ticker stays blank and silently retries every 15 s until it works.
+    let _newsRetryTimer = null;
+
+    async function fetchNews() {
+      // Cancel any pending retry so we don't stack up parallel loops
+      clearTimeout(_newsRetryTimer);
+      _newsRetryTimer = null;
+
+      try {
+        const rssUrl = 'https://feeds.bbci.co.uk/news/rss.xml';
+        const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`);
+        if (!r.ok) throw new Error('Proxy request failed');
+        const data = await r.json();
+
+        const xml = new DOMParser().parseFromString(data.contents, 'text/xml');
+        const items = [...xml.querySelectorAll('item')].slice(0, 12);
+        const headlines = items.map(i => i.querySelector('title').textContent.trim());
+        if (!headlines.length) throw new Error('No items in feed');
+
+        // Build duplicated content for seamless looping
+        const half = headlines.map(h =>
+          `<span class="ticker-item">${h}</span><span class="ticker-sep">◆</span>`
+        ).join('');
+
+        const track = document.getElementById('ticker-track');
+        track.innerHTML = half + half; // duplicate so the loop is invisible
+
+        // Measure content width then calculate a comfortable scroll speed
+        requestAnimationFrame(() => {
+          const oneLoopWidth = track.scrollWidth / 2; // half = one copy of content
+          const pxPerSecond = 45;
+          track.style.animationDuration = `${oneLoopWidth / pxPerSecond}s`;
+          track.style.animationPlayState = 'running';
+        });
+
+      } catch (e) {
+        // Stay silent — clear the track and retry in 15 s
+        console.warn('News fetch failed, retrying in 15 s…', e);
+        const track = document.getElementById('ticker-track');
+        track.innerHTML = '';
+        track.style.animationPlayState = 'paused';
+        _newsRetryTimer = setTimeout(fetchNews, 15_000);
+      }
+    }
+
+    fetchNews();
+    setInterval(fetchNews, CONFIG.newsRefreshMins * 60_000);
+
+    /* ─── Local Traffic (via Cloudflare Worker proxy → TomTom) ─── */
+    // The signage page only ever talks to YOUR Worker (trafficProxyUrl).
+    // The Worker holds the real TomTom key as a server-side secret — see
+    // traffic-proxy-worker.js for the one-time setup. Nothing secret is
+    // ever present in this file or sent from the browser.
+    // On failure, silently retries every 30 s without clearing the display.
+    const TRAFFIC_CATEGORIES = {
+      0: 'Incident',   1: 'Accident',    2: 'Fog',
+      3: 'Hazard',     4: 'Rain',        5: 'Ice',
+      6: 'Congestion', 7: 'Lane Closed', 8: 'Road Closed',
+      9: 'Road Works', 10: 'High Winds', 11: 'Flooding',
+      13: 'Breakdown', 14: 'Congestion',
+    };
+
+    let _trafficRetryTimer = null;
+
+    async function fetchTraffic() {
+      clearTimeout(_trafficRetryTimer);
+      _trafficRetryTimer = null;
+
+      const listEl = document.getElementById('traffic-list');
+
+      // No proxy set up yet — show a setup prompt rather than an error
+      if (!CONFIG.trafficProxyUrl) {
+        listEl.innerHTML = '<span style="font-size:0.8em;color:rgba(255,255,255,0.35);font-style:italic">Add trafficProxyUrl to CONFIG</span>';
+        return;
+      }
+
+      try {
+        const { latitude: lat, longitude: lon } = CONFIG;
+        // Only coordinates are sent — no API key ever leaves this page
+        const url = `${CONFIG.trafficProxyUrl}?lat=${lat}&lon=${lon}&radius=2.5`;
+
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`Proxy ${r.status}`);
+        const data = await r.json();
+
+        const incidents = (data.incidents || [])
+          .filter(i => (i.properties?.magnitudeOfDelay ?? 0) >= 1)
+          .sort((a, b) => (b.properties.magnitudeOfDelay ?? 0) - (a.properties.magnitudeOfDelay ?? 0))
+          .slice(0, 10); // grab more than fits — the viewport scrolls through the rest
+
+        if (!incidents.length) {
+          listEl.style.animationPlayState = 'paused';
+          listEl.innerHTML = '<div class="traffic-clear"><span class="traffic-check">\u2713</span> No incidents nearby</div>';
+          return;
+        }
+
+        const itemsHtml = incidents.map((inc, idx) => {
+          const p = inc.properties;
+          const roadNumbers = (p.roadNumbers || []).filter(Boolean);
+          const hasRoadNumber = roadNumbers.length > 0;
+          // Small helper to visually label a place name as part of a route
+          // (e.g. "FROM Rochester Road") so it can't be misread as the
+          // closed road's own name.
+          const labelled = (label, place) => `<span class="traffic-prefix">${label}</span>${place}`;
+          // Same, but also bolds/whitens the place name — used only for the
+          // From/To pairing (no road number) so both lines match visually.
+          const labelledStrong = (label, place) =>
+            `<span class="traffic-prefix">${label}</span><span class="traffic-strong">${place}</span>`;
+
+          // Prefer the official road number (e.g. "A2") as the headline.
+          // If TomTom doesn't supply one for this incident, fall back to the
+          // named road/junction in "from" — but clearly labelled "From" so
+          // it reads as the start of a route, not as the road that's shut.
+          const road = hasRoadNumber
+            ? roadNumbers.join(' / ')
+            : (p.from && p.to ? labelledStrong('From', p.from)
+              : p.from        ? labelled('Near', p.from)
+              : p.to          ? labelled('Near', p.to)
+              : 'Unnamed road');
+
+          let desc = '';
+          if (hasRoadNumber) {
+            if (p.from && p.to)      desc = `${p.from} to ${p.to}`;
+            else if (p.from)         desc = labelled('Near', p.from);
+            else if (p.to)           desc = labelled('Near', p.to);
+          } else if (p.from && p.to) {
+            // "From {place}" was already used as the headline above —
+            // this line completes the route: "to {place}", bold/white to match
+            desc = labelledStrong('to', p.to);
+          }
+          if (!desc && p.events?.[0]?.description) desc = p.events[0].description;
+
+          const type = TRAFFIC_CATEGORIES[p.iconCategory] ?? 'Incident';
+          const mag  = p.magnitudeOfDelay ?? 1;
+          const sev  = mag >= 3 ? 'major' : mag === 2 ? 'moderate' : 'minor';
+          const rule = idx > 0 ? '<hr class="traffic-rule">' : '';
+          return `${rule}<div class="traffic-item">
+            <div class="traffic-item-top">
+              <span class="traffic-road">${road}</span>
+              <span class="traffic-badge ${sev}">${type}</span>
+            </div>
+            ${desc ? `<div class="traffic-item-desc">${desc}</div>` : ''}
+          </div>`;
+        }).join('');
+
+        // Render once first to measure whether it's taller than the visible window
+        listEl.style.animationPlayState = 'paused';
+        listEl.innerHTML = itemsHtml;
+
+        requestAnimationFrame(() => {
+          const viewport = document.getElementById('traffic-viewport');
+          const fitsWithoutScrolling = listEl.scrollHeight <= viewport.clientHeight;
+
+          if (fitsWithoutScrolling) {
+            return; // short list — just show it, no need to scroll
+          }
+
+          // Too tall for the window — duplicate content so the scroll loop is seamless
+          listEl.innerHTML = itemsHtml + itemsHtml;
+          requestAnimationFrame(() => {
+            const halfHeight = listEl.scrollHeight / 2;
+            const pxPerSecond = 16; // slow and readable — these are short text rows, not a ticker
+            listEl.style.animationDuration = `${halfHeight / pxPerSecond}s`;
+            listEl.style.animationPlayState = 'running';
+          });
+        });
+
+      } catch (e) {
+        console.warn('Traffic fetch failed, retrying in 30 s…', e);
+        _trafficRetryTimer = setTimeout(fetchTraffic, 30_000);
+        // Keep existing display rather than blanking it on a transient error
+      }
+    }
+
+    fetchTraffic();
+    setInterval(fetchTraffic, CONFIG.trafficRefreshMins * 60_000);
+  </script>
+
+</body>
+</html>
