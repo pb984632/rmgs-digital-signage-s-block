@@ -324,7 +324,7 @@
   ════════════════════════════════════════════════════════════════ -->
   <iframe
     id="slides-frame"
-    src="https://docs.google.com/presentation/d/1vyG4eYwWcoiVyFzQNdiYqXiHUaQTJBniUhCUAtjjIAw/embed?start=true&loop=true&delayms=10000&rm=minimal"
+    src="https://docs.google.com/presentation/d/14pYZJoX_mHu2MozF4-R7ESIm3LqX2DcYAlyJplqy-Rg/embed?start=true&loop=true&delayms=10000&rm=minimal"
     allowfullscreen="true"
     mozallowfullscreen="true"
     webkitallowfullscreen="true">
@@ -384,7 +384,7 @@
 
       // How often to reload the Google Slides iframe to pick up any changes (minutes)
       // Google's publish cache usually updates within ~5 mins, so 10 mins is a safe default
-      slidesRefreshMins: 10,
+      slidesRefreshMins: 60,
 
       // How often to refresh BBC News headlines (minutes)
       newsRefreshMins: 60,
@@ -393,10 +393,10 @@
       // Your TomTom key lives only on Cloudflare's server, never here.
       // See traffic-proxy-worker.js for setup steps. Looks like:
       // 'https://rmgs-traffic-proxy.yourname.workers.dev'
-      trafficProxyUrl: '',
+      trafficProxyUrl: 'broken-bar-eda6.pbaldwin-9c2.workers.dev',
 
       // How often to refresh local traffic data (minutes)
-      trafficRefreshMins: 10,
+      trafficRefreshMins: 3,
     };
 
     /* ─── Time & Date ─── */
