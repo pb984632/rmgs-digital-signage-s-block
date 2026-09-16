@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RMGS Digital Signage S Block</title>
+  <title>PE - RMGS Digital Signage</title>
   <!-- Weather Icons font — works on all browsers incl. Raspberry Pi Chromium -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.10/css/weather-icons.min.css">
   <style>
@@ -48,7 +48,6 @@
       font-weight: 700;
       letter-spacing: -1px;
       line-height: 1;
-      /* subtle blue-white gradient on the digits */
       background: linear-gradient(135deg, #ffffff 60%, #a8c8ff);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -80,7 +79,7 @@
 
     #weather-icon {
       font-size: 1.6em;
-      line-height: 0;    /* collapse extra ascent space so flexbox centres the glyph itself */
+      line-height: 0;
       flex-shrink: 0;
       color: #a8c8ff;
     }
@@ -315,13 +314,6 @@
 </head>
 <body>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       GOOGLE SLIDES EMBED
-       Replace PRESENTATION_ID below with your actual Slides ID.
-       Find it in the URL: docs.google.com/presentation/d/XXXXXXX/edit
-       Change delayms to control seconds per slide (ms):
-         5000 = 5s  |  10000 = 10s  |  15000 = 15s  |  30000 = 30s
-  ════════════════════════════════════════════════════════════════ -->
   <iframe
     id="slides-frame"
     src="https://docs.google.com/presentation/d/1St0WuWyxG35GrFwMVaRQiewfC_j_eDj0ORSeZXHmtiQ/embed?start=true&loop=true&delayms=10000&rm=minimal"
@@ -330,9 +322,6 @@
     webkitallowfullscreen="true">
   </iframe>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       TIME / DATE / WEATHER WIDGET
-  ════════════════════════════════════════════════════════════════ -->
   <div id="widget">
     <div id="time">--:--</div>
     <div id="date">Loading…</div>
@@ -344,9 +333,6 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       NEWS TICKER
-  ════════════════════════════════════════════════════════════════ -->
   <div id="ticker">
     <div id="ticker-label">
       <span></span>BBC News
@@ -358,9 +344,6 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       TRAFFIC WIDGET
-  ════════════════════════════════════════════════════════════════ -->
   <div id="traffic-widget">
     <div id="traffic-title">Local Traffic</div>
     <div id="traffic-viewport">
@@ -371,31 +354,13 @@
   </div>
 
   <script>
-    /* ═══════════════════════════════════════════════════════════
-       CONFIGURATION — edit these for your school
-    ════════════════════════════════════════════════════════════ */
     const CONFIG = {
-      // School location: find your lat/lon at https://www.latlong.net/
       latitude:  51.371906,
       longitude:  0.594229,
-
-      // How often to refresh weather (minutes)
       weatherRefreshMins: 30,
-
-      // How often to reload the Google Slides iframe to pick up any changes (minutes)
-      // Google's publish cache usually updates within ~5 mins, so 10 mins is a safe default
       slidesRefreshMins: 15,
-
-      // How often to refresh BBC News headlines (minutes)
       newsRefreshMins: 60,
-
-      // Cloudflare Worker URL that proxies TomTom traffic requests.
-      // Your TomTom key lives only on Cloudflare's server, never here.
-      // See traffic-proxy-worker.js for setup steps. Looks like:
-      // 'https://rmgs-traffic-proxy.yourname.workers.dev'
       trafficProxyUrl: 'https://broken-bar-eda6.pbaldwin-9c2.workers.dev',
-
-      // How often to refresh local traffic data (minutes)
       trafficRefreshMins: 30,
     };
 
@@ -410,8 +375,7 @@
     tick();
     setInterval(tick, 1000);
 
-    /* ─── Weather (Open-Meteo — free, no API key needed) ─── */
-    // WMO weather code → Weather Icons font class + description
+    /* ─── Weather ─── */
     const WMO = {
       0:  { icon: 'wi-day-sunny',          desc: 'Clear sky' },
       1:  { icon: 'wi-day-cloudy',         desc: 'Mainly clear' },
@@ -453,7 +417,6 @@
         const d = await r.json();
         const temp = Math.round(d.current.temperature_2m);
         const info = WMO[d.current.weather_code] ?? { icon: 'wi-thermometer', desc: 'Weather' };
-        // Set the Weather Icons font class on the <i> element
         document.getElementById('weather-icon').className = `wi ${info.icon}`;
         document.getElementById('weather-desc').textContent = info.desc;
         document.getElementById('weather-temp').textContent = `${temp}°C`;
@@ -466,21 +429,15 @@
     setInterval(fetchWeather, CONFIG.weatherRefreshMins * 60_000);
 
     /* ─── Slides auto-refresh ─── */
-    // Reloads only the iframe (not the whole page) so the clock and weather
-    // stay up continuously. Picks up any changes made in Google Slides.
     setInterval(() => {
       const frame = document.getElementById('slides-frame');
-      frame.src = frame.src; // triggers a fresh fetch from Google
+      frame.src = frame.src;
     }, CONFIG.slidesRefreshMins * 60_000);
 
     /* ─── BBC News Ticker ─── */
-    // BBC RSS is fetched via a CORS proxy (api.allorigins.win) because browsers
-    // block direct cross-origin RSS requests.
-    // On failure the ticker stays blank and silently retries every 15 s until it works.
     let _newsRetryTimer = null;
 
     async function fetchNews() {
-      // Cancel any pending retry so we don't stack up parallel loops
       clearTimeout(_newsRetryTimer);
       _newsRetryTimer = null;
 
@@ -495,24 +452,21 @@
         const headlines = items.map(i => i.querySelector('title').textContent.trim());
         if (!headlines.length) throw new Error('No items in feed');
 
-        // Build duplicated content for seamless looping
         const half = headlines.map(h =>
           `<span class="ticker-item">${h}</span><span class="ticker-sep">◆</span>`
         ).join('');
 
         const track = document.getElementById('ticker-track');
-        track.innerHTML = half + half; // duplicate so the loop is invisible
+        track.innerHTML = half + half;
 
-        // Measure content width then calculate a comfortable scroll speed
         requestAnimationFrame(() => {
-          const oneLoopWidth = track.scrollWidth / 2; // half = one copy of content
+          const oneLoopWidth = track.scrollWidth / 2;
           const pxPerSecond = 45;
           track.style.animationDuration = `${oneLoopWidth / pxPerSecond}s`;
           track.style.animationPlayState = 'running';
         });
 
       } catch (e) {
-        // Stay silent — clear the track and retry in 15 s
         console.warn('News fetch failed, retrying in 15 s…', e);
         const track = document.getElementById('ticker-track');
         track.innerHTML = '';
@@ -524,12 +478,7 @@
     fetchNews();
     setInterval(fetchNews, CONFIG.newsRefreshMins * 60_000);
 
-    /* ─── Local Traffic (via Cloudflare Worker proxy → TomTom) ─── */
-    // The signage page only ever talks to YOUR Worker (trafficProxyUrl).
-    // The Worker holds the real TomTom key as a server-side secret — see
-    // traffic-proxy-worker.js for the one-time setup. Nothing secret is
-    // ever present in this file or sent from the browser.
-    // On failure, silently retries every 30 s without clearing the display.
+    /* ─── Local Traffic ─── */
     const TRAFFIC_CATEGORIES = {
       0: 'Incident',   1: 'Accident',    2: 'Fog',
       3: 'Hazard',     4: 'Rain',        5: 'Ice',
@@ -537,6 +486,14 @@
       9: 'Road Works', 10: 'High Winds', 11: 'Flooding',
       13: 'Breakdown', 14: 'Congestion',
     };
+
+    function isSchoolHours() {
+      const now  = new Date();
+      const day  = now.getDay();
+      if (day === 0 || day === 6) return false;
+      const mins = now.getHours() * 60 + now.getMinutes();
+      return mins >= (7 * 60 + 30) && mins < (16 * 60);
+    }
 
     let _trafficRetryTimer = null;
 
@@ -546,15 +503,19 @@
 
       const listEl = document.getElementById('traffic-list');
 
-      // No proxy set up yet — show a setup prompt rather than an error
       if (!CONFIG.trafficProxyUrl) {
         listEl.innerHTML = '<span style="font-size:0.8em;color:rgba(255,255,255,0.35);font-style:italic">Add trafficProxyUrl to CONFIG</span>';
         return;
       }
 
+      if (!isSchoolHours()) {
+        listEl.style.animationPlayState = 'paused';
+        listEl.innerHTML = '';
+        return;
+      }
+
       try {
         const { latitude: lat, longitude: lon } = CONFIG;
-        // Only coordinates are sent — no API key ever leaves this page
         const url = `${CONFIG.trafficProxyUrl}?lat=${lat}&lon=${lon}&radius=2.5`;
 
         const r = await fetch(url);
@@ -564,7 +525,7 @@
         const incidents = (data.incidents || [])
           .filter(i => (i.properties?.magnitudeOfDelay ?? 0) >= 1)
           .sort((a, b) => (b.properties.magnitudeOfDelay ?? 0) - (a.properties.magnitudeOfDelay ?? 0))
-          .slice(0, 10); // grab more than fits — the viewport scrolls through the rest
+          .slice(0, 10);
 
         if (!incidents.length) {
           listEl.style.animationPlayState = 'paused';
@@ -576,19 +537,10 @@
           const p = inc.properties;
           const roadNumbers = (p.roadNumbers || []).filter(Boolean);
           const hasRoadNumber = roadNumbers.length > 0;
-          // Small helper to visually label a place name as part of a route
-          // (e.g. "FROM Rochester Road") so it can't be misread as the
-          // closed road's own name.
           const labelled = (label, place) => `<span class="traffic-prefix">${label}</span>${place}`;
-          // Same, but also bolds/whitens the place name — used only for the
-          // From/To pairing (no road number) so both lines match visually.
           const labelledStrong = (label, place) =>
             `<span class="traffic-prefix">${label}</span><span class="traffic-strong">${place}</span>`;
 
-          // Prefer the official road number (e.g. "A2") as the headline.
-          // If TomTom doesn't supply one for this incident, fall back to the
-          // named road/junction in "from" — but clearly labelled "From" so
-          // it reads as the start of a route, not as the road that's shut.
           const road = hasRoadNumber
             ? roadNumbers.join(' / ')
             : (p.from && p.to ? labelledStrong('From', p.from)
@@ -602,8 +554,6 @@
             else if (p.from)         desc = labelled('Near', p.from);
             else if (p.to)           desc = labelled('Near', p.to);
           } else if (p.from && p.to) {
-            // "From {place}" was already used as the headline above —
-            // this line completes the route: "to {place}", bold/white to match
             desc = labelledStrong('to', p.to);
           }
           if (!desc && p.events?.[0]?.description) desc = p.events[0].description;
@@ -621,7 +571,6 @@
           </div>`;
         }).join('');
 
-        // Render once first to measure whether it's taller than the visible window
         listEl.style.animationPlayState = 'paused';
         listEl.innerHTML = itemsHtml;
 
@@ -630,14 +579,13 @@
           const fitsWithoutScrolling = listEl.scrollHeight <= viewport.clientHeight;
 
           if (fitsWithoutScrolling) {
-            return; // short list — just show it, no need to scroll
+            return;
           }
 
-          // Too tall for the window — duplicate content so the scroll loop is seamless
           listEl.innerHTML = itemsHtml + itemsHtml;
           requestAnimationFrame(() => {
             const halfHeight = listEl.scrollHeight / 2;
-            const pxPerSecond = 16; // slow and readable — these are short text rows, not a ticker
+            const pxPerSecond = 16;
             listEl.style.animationDuration = `${halfHeight / pxPerSecond}s`;
             listEl.style.animationPlayState = 'running';
           });
@@ -646,7 +594,6 @@
       } catch (e) {
         console.warn('Traffic fetch failed, retrying in 30 s…', e);
         _trafficRetryTimer = setTimeout(fetchTraffic, 30_000);
-        // Keep existing display rather than blanking it on a transient error
       }
     }
 
